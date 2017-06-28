@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+<configuration>
+
+	<property>
+		<name>dfs.client.use.datanode.hostname</name>
+		<value>true</value>
+		<description>
+			[boolean] don't change this property.
+		</description>
+	</property>
+
+	<property>
+		<name>goods.file.format</name>
+		<value>CTRL_ROWID,G_NO,G_CLASS,G_NUM,G_IMG,G_MODE,G_NAME,G_SOLD_NUM,G_START_PRICE,G_BASE_PRICE,G_DIRECT_PRICE,G_NOW_PRICE,G_START_DATE,G_START_TIME,G_END_DATE,G_END_TIME,G_CLOSE_DATE,G_CLOSE_TIME,G_CONDITION,G_LOCATION,G_SHIP,G_SHIP_COST,G_PAY_WAY,G_DELIVER_WAY,G_CLICK,G_ACTIVE,G_BID_RECORD,G_WATCH,G_POST_TIME,G_LIMIT_NEGATIVE,CLASS_ID,G_PRIORITY_ORDER,G_LASTUPDATE,G_ACCEPT_SHIPRULE,D_FLAG,G_SPEC,SPEC_ACTIVE,G_UPLOAD_WAY,IS_DELETE,OP_TIME,_SOURCE_TIME</value>
+		<description>
+			[String array] the value type : Boolean, Int, Float, Double, String ....
+			this property be loaded in the TSConfig create and use in MR task.
+		</description>
+	</property>
+	<property>
+		<name>asdweight.file.format</name>
+		<value>CTRL_ROWID,APPLY_STATUS,ASD_WEIGHT,_SOURCE_TIME</value>
+		<description>
+			[String array] the value type : Boolean, Int, Float, Double, String ....
+			this property be loaded in the TSConfig create and use in MR task.
+		</description>
+	</property>
+	<property>
+		<name>clustering.file.format</name>
+		<value>CTRL_ROWID,G_NO,G_CLASS,G_NAME,G_CLOSE_DATE,G_LASTUPDATE,G_DIRECT_PRICE,GROUP_HEAD,GROUP_NUM,FINGERPRINT,UPDATE</value>
+		<description>
+			[String array] the value type : Boolean, Int, Float, Double, String ....
+			this property be loaded in the TSConfig create and use in MR task.
+		</description>
+	</property>
+	<property>
+		<name>stopword.file</name>
+		<value>`,~,!,@,#,%,$,^,*,(,),_,-,+,=,|,\,?,/,>,.,:,;,",',{,[,},],-,‵,～,！,＠,＃,＄,％,︿,＆,＊,（,）,＿,－,＋,＝,｜,＼,｛,｝,〔,〕,：,；,”,’,？,／,＞,。,＜,，,「,」,、,《,》</value>
+		<description>
+			[String array] the value type : Boolean, Int, Float, Double, String ....
+			this property be loaded in the TSConfig create and use in MR task.
+		</description>
+	</property>
+</configuration>

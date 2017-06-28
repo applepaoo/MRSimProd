@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="lib" path="conf"/>
+	<classpathentry kind="lib" path="lib_tmp/ts-hadoop-win-fs.1.0.0.jar"/>
+	<classpathentry kind="src" path="src"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="con" path="org.apache.ivyde.eclipse.cpcontainer.IVYDE_CONTAINER/?project=MRSimpleCode&amp;ivyXmlPath=ivy%2Fivy.xml&amp;confs=*&amp;ivySettingsPath=ivy%2Fivysettings.xml&amp;loadSettingsOnDemand=false&amp;ivyUserDir=&amp;propertyFiles="/>
+	<classpathentry kind="output" path="bin"/>
+</classpath>

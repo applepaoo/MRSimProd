@@ -1,0 +1,47 @@
+<?xml version="1.0" ?>
+<ivy-module version="1.0">
+  <info organisation="tw.com.ruten.ts" module="simple">
+    <license name="Apache 2.0"
+      url="http://www.apache.org/licenses/LICENSE-2.0.txt/" />
+    <description>
+    	MR Simple code for Hadoop-2.7.3
+    </description>
+  </info>
+
+  <configurations>
+    <include file="${basedir}/ivy/ivy-configurations.xml" />
+  </configurations>
+
+  <publications>
+    <!--get the artifact from our module name -->
+    <artifact conf="master" />
+  </publications>
+
+  <dependencies>
+    <!-- Hadoop Dependencies -->
+    <dependency org="org.apache.hadoop" name="hadoop-common" rev="2.7.3" conf="*->default">
+      <exclude org="hsqldb" name="hsqldb" />
+      <exclude org="net.sf.kosmosfs" name="kfs" />
+      <exclude org="net.java.dev.jets3t" name="jets3t" /> 
+      <exclude org="org.eclipse.jdt" name="core" />
+      <exclude org="org.mortbay.jetty" name="jsp-*" />
+      <exclude org="ant" name="ant" />
+    </dependency>
+    
+    <dependency org="org.apache.hadoop" name="hadoop-hdfs" rev="2.7.3" conf="*->default"/>
+    <dependency org="org.apache.hadoop" name="hadoop-mapreduce-client-core" rev="2.7.3" conf="*->default"/>
+    <dependency org="org.apache.hadoop" name="hadoop-mapreduce-client-jobclient" rev="2.7.3" conf="*->default"/>
+    <!-- https://mvnrepository.com/artifact/com.google.guava/guava -->
+    <dependency org="com.google.guava" name="guava" rev="22.0"/>
+    <!-- https://mvnrepository.com/artifact/com.huaban/jieba-analysis -->
+    <dependency org="com.huaban" name="jieba-analysis" rev="1.0.2"/>
+    <dependency org="org.apache.solr" name="solr-solrj" rev="6.4.0"/>
+    <!-- https://mvnrepository.com/artifact/org.apache.zookeeper/zookeeper -->
+    <dependency org="org.apache.zookeeper" name="zookeeper" rev="3.4.9" />
+    <dependency org="org.apache.httpcomponents" name="fluent-hc" rev="4.2"/>
+    <dependency org="com.googlecode.json-simple" name="json-simple" rev="1.1.1"/>
+
+    <!-- End of Hadoop Dependencies -->
+  </dependencies>
+
+</ivy-module>
