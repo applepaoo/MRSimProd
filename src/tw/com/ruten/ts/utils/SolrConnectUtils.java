@@ -35,6 +35,7 @@ import tw.com.ruten.ts.model.GroupTagUpdateModel;
 
 public class SolrConnectUtils {
     public static Logger LOG = LoggerFactory.getLogger(SolrConnectUtils.class);
+    private static SolrZkClient zkClient = null;
 
     public static void sendDeleteToSolr(String zkHost, String collection, List<String> deletes) throws IOException, InterruptedException, KeeperException{
         sendDeleteToSolr(zkHost, collection, deletes, true, null);
@@ -204,7 +205,11 @@ public class SolrConnectUtils {
         if (collection == null) {
             throw new IllegalArgumentException("collection must not be null");
         }
-        SolrZkClient zkClient = new SolrZkClient(zkHost, 1000);
+        
+        if (zkClient == null) {
+        	zkClient = new SolrZkClient(zkHost, 1000);
+        }
+        
         @SuppressWarnings("resource")
         ZkStateReader zkStateReader = new ZkStateReader(zkClient);
 
@@ -216,7 +221,6 @@ public class SolrConnectUtils {
         DocCollection docCollection = state.getCollection(collection);
         // check error
 
-        zkClient.close();
         List<Replica> replicas = new ArrayList<Replica>();
         for(String node : liveNodes){
             List<Replica> tmpReplicas = docCollection.getReplicas(node);
@@ -258,6 +262,10 @@ public class SolrConnectUtils {
     private static String getTargetShard(String zkHost, String collection, String type, int shardNum) throws InterruptedException, KeeperException {
         List<Replica> replicas = getShards(zkHost, collection, type);
         return replicas.get(shardNum).getCoreUrl();
+    }
+    
+    public static void closeZkClient() {
+    	zkClient.close();
     }
 
     public static void main(String args[]) throws Exception {

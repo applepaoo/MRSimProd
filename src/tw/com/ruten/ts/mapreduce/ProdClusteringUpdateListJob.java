@@ -228,6 +228,7 @@ public class ProdClusteringUpdateListJob extends Configured implements Tool {
             } catch (Exception e) {
                 context.write(new Text("final"), new Text(e.toString()));
             }
+            SolrConnectUtils.closeZkClient();
         }
 
     }
