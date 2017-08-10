@@ -11,6 +11,7 @@ import java.util.*;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
 import com.ruten.tool.SimHash;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileSystem;
@@ -20,6 +21,7 @@ import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.MultipleOutputs;
@@ -33,13 +35,17 @@ import tw.com.ruten.ts.mapreduce.ProdClusteringJob.SortedKey.SortComparator;
 import tw.com.ruten.ts.utils.JobUtils;
 import tw.com.ruten.ts.utils.TsConf;
 
-
+/**
+ * 同一賣家內的商品進行分群
+ */
 public class ProdClusteringJob extends Configured implements Tool {
     public static Logger LOG = Logger.getLogger(ProdClusteringJob.class);
     private static String GOODS_FILE_FORMAT = "goods.file.format";
     private static String CLUSTERING_FORMAT = "clustering.file.format";
     private static String STOPWORD_FILE = "stopword.file";
     public Configuration conf;
+
+
 
     public static class SortedKey implements WritableComparable<SortedKey> {
         Text sortValue = new Text();
@@ -123,12 +129,10 @@ public class ProdClusteringJob extends Configured implements Tool {
         }
     }
 
-    public static class ProdClusteringJobMapper extends Mapper<Object, Text, SortedKey, MapWritable> {
+    public static class ProdClusteringJobMapper extends Mapper<Object, MapWritable, SortedKey, MapWritable> {
         private Configuration conf;
         private SimHash simHash = new SimHash(Hashing.murmur3_128());
         private HashSet<String> stopwordList = new HashSet<>();
-        private List<String> goodsFields;
-        private String[] clusterField;
 
         @Override
         public void setup(Context context) throws IOException, InterruptedException {
@@ -136,27 +140,14 @@ public class ProdClusteringJob extends Configured implements Tool {
             for (String word : conf.getStrings(STOPWORD_FILE)) {
                 stopwordList.add(word);
             }
-            goodsFields = Arrays.asList(conf.getStrings(GOODS_FILE_FORMAT));
-            clusterField = conf.getStrings(CLUSTERING_FORMAT);
         }
 
         @Override
-        public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
-            String[] data = value.toString().split("\t");
-            if (goodsFields != null && goodsFields.size() == data.length) {
-                if(data[goodsFields.indexOf("G_PRIORITY_ORDER")].isEmpty()) { // 廣告品不列入計算
-                    SortedKey outKey = new SortedKey();
-                    outKey.defaultKey.set(data[goodsFields.indexOf("CTRL_ROWID")]);
-                    outKey.sortValue.set(new BigInteger(simHash.hash(data[goodsFields.indexOf("G_NAME")], stopwordList).toByteArray()).toString());
-                    MapWritable outValue = new MapWritable();
-                    for (String keyField : clusterField) {
-                        if (goodsFields.contains(keyField)) {
-                            outValue.put(new Text(keyField), new Text(data[goodsFields.indexOf(keyField)]));
-                        }
-                    }
-                    context.write(outKey, outValue);
-                }
-            }
+        public void map(Object key, MapWritable value, Context context) throws IOException, InterruptedException {
+                SortedKey outKey = new SortedKey();
+                outKey.defaultKey.set(value.get(new Text("CTRL_ROWID")).toString());
+                outKey.sortValue.set(new BigInteger(simHash.hash(value.get(new Text("G_NAME")).toString(), stopwordList).toByteArray()).toString());
+                context.write(outKey, value);
         }
     }
 
@@ -190,7 +181,7 @@ public class ProdClusteringJob extends Configured implements Tool {
             for (MapWritable val : values) {
                 val.put(new Text("UPDATE"), new Text(sdfSolr.format(new Date())));
 
-                if (!val.containsKey(new Text("FINGERPRINT"))) {
+                if (val.get(new Text("FINGERPRINT")).toString().equals("(null)")) {
                     val.put(new Text("FINGERPRINT"), new Text(hf.hashString(clusterName, Charset.defaultCharset()).toString()));
                 }
                 BigInteger current = new BigInteger(key.sortValue.toString());
@@ -203,19 +194,18 @@ public class ProdClusteringJob extends Configured implements Tool {
                         mos.write("clusterInfo", NullWritable.get(), clusterInfo, "clusterInfo/part");
                         val.put(new Text("FINGERPRINT"), new Text(hf.hashString(clusterName, Charset.defaultCharset()).toString()));
                         clusterNum = 0;
-                        if (val.get(new Text("G_CLOSE_DATE")).toString().isEmpty()) {
-                            clusterCount++;
-                        }
+
+                        clusterCount++;
                     }
                 }
 
-                if (val.get(new Text("G_CLOSE_DATE")).toString().isEmpty()) {
-                    if(last == null){
-                        clusterCount++;
-                    }
-                    prodCount++;
-                    clusterNum++;
+
+                if (last == null) {
+                    clusterCount++;
                 }
+                prodCount++;
+                clusterNum++;
+
 
                 last = current;
 
@@ -226,7 +216,10 @@ public class ProdClusteringJob extends Configured implements Tool {
                         outValue += "\t";
                     }
                     if (val.containsKey(tmp)) {
-                        outValue += val.get(tmp).toString();
+                        Writable writable = val.get(tmp);
+                        outValue += writable.toString();
+                    } else {
+                        outValue += "(null)";
                     }
                 }
 
@@ -235,7 +228,7 @@ public class ProdClusteringJob extends Configured implements Tool {
             }
             clusterInfo.set(hf.hashString(clusterName, Charset.defaultCharset()) + "\t" + clusterNum);
             mos.write("clusterInfo", NullWritable.get(), clusterInfo, "clusterInfo/part");
-            info.set(new Text(key.defaultKey + "\t" + (clusterCount == 0 && prodCount == 0 ? 0.0 : (clusterCount/(float) prodCount))) + "\t" + clusterCount + "\t" + prodCount);
+            info.set(new Text(key.defaultKey + "\t" + (clusterCount == 0 && prodCount == 0 ? 0.0 : (clusterCount / (float) prodCount))) + "\t" + clusterCount + "\t" + prodCount);
             mos.write("info", NullWritable.get(), info, "info/part");
         }
 
@@ -244,6 +237,7 @@ public class ProdClusteringJob extends Configured implements Tool {
             mos.close();
         }
     }
+
 
     @Override
     public int run(String[] args) throws Exception {
@@ -264,7 +258,7 @@ public class ProdClusteringJob extends Configured implements Tool {
         Job job = Job.getInstance(conf, "ProdClusteringJob");
 
         job.setJarByClass(ProdClusteringJob.class);
-        job.setInputFormatClass(TextInputFormat.class);
+        job.setInputFormatClass(SequenceFileInputFormat.class);
         job.setMapperClass(ProdClusteringJobMapper.class);
 
         /// map reduce change
@@ -285,7 +279,7 @@ public class ProdClusteringJob extends Configured implements Tool {
         MultipleOutputs.addNamedOutput(job, "clusterInfo", TextOutputFormat.class, NullWritable.class, Text.class);
         MultipleOutputs.addNamedOutput(job, "result", TextOutputFormat.class, NullWritable.class, Text.class);
 
-        return JobUtils.sumbitJob(job, true, "/user/webuser/analy/goods/v1") ? 0 : -1;
+        return JobUtils.sumbitJob(job, true) ? 0 : -1;
     }
 
     public static void main(String[] args) throws Exception {

@@ -10,6 +10,7 @@ import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.*;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
@@ -22,29 +23,30 @@ import java.io.InputStreamReader;
 import java.util.*;
 
 /**
+ * 過濾 24h、與買廣告的賣家(不列入分群計算)
  * Created by jia03740 on 2017/6/19.
  */
-public class ProdClusteringFilterJob extends Configured implements org.apache.hadoop.util.Tool  {
+public class ProdClusteringFilterJob extends Configured implements org.apache.hadoop.util.Tool {
     public static Logger LOG = Logger.getLogger(ProdClusteringFilterJob.class);
     public Configuration conf;
     private static String GOODS_FILE_FORMAT = "goods.file.format";
     private static String ASD_WEIGHT_FILE_FORMAT = "asdweight.file.format";
+    private static String CLUSTERING_FORMAT = "clustering.file.format";
 
-//    public static class AsdweightMapper  extends Mapper<Object, MapWritable, Text, MapWritable> {
-//        @Override
-//        public void map(Object key, MapWritable value, Context context) throws IOException, InterruptedException {
-//            if(value.get(new Text("APPLY_STATUS")).toString().equalsIgnoreCase("A")){
-//                MapWritable outValue = new MapWritable();
-//                outValue.put(new Text("ISDELETE"), new Text("Y"));
-//                context.write(new Text(key.toString()), outValue);
-//            }
-//        }
-//    }
-
-    public static class BuyrankitemMapper  extends Mapper<Object, MapWritable, Text, MapWritable> {
+    public static class BritemorderMapper extends Mapper<Object, MapWritable, Text, MapWritable> {
         @Override
         public void map(Object key, MapWritable value, Context context) throws IOException, InterruptedException {
-            if(value.get(new Text("B_STATUS")).toString().equalsIgnoreCase("r")){
+            MapWritable outValue = new MapWritable();
+            outValue.put(new Text("RANK"), value.get(new Text("RANK")));
+            outValue.put(new Text("CTRL_ROWID"), value.get(new Text("CTRL_ROWID")));
+            context.write(new Text(key.toString()), outValue);
+        }
+    }
+
+    public static class BuyrankitemMapper extends Mapper<Object, MapWritable, Text, MapWritable> {
+        @Override
+        public void map(Object key, MapWritable value, Context context) throws IOException, InterruptedException {
+            if (value.get(new Text("B_STATUS")).toString().equalsIgnoreCase("r")) {
                 MapWritable outValue = new MapWritable();
                 outValue.put(new Text("EXCLUDE"), new Text("Y"));
                 outValue.put(new Text("CTRL_ROWID"), value.get(new Text("CTRL_ROWID")));
@@ -53,17 +55,38 @@ public class ProdClusteringFilterJob extends Configured implements org.apache.ha
         }
     }
 
-    public static class GoodsMapper  extends Mapper<Object, MapWritable, Text, MapWritable> {
+    public static class GoodsMapper extends Mapper<Object, MapWritable, Text, MapWritable> {
+        private Configuration conf;
+        private String[] clusterField;
+
+        @Override
+        public void setup(Context context) throws IOException, InterruptedException {
+            conf = context.getConfiguration();
+            clusterField = conf.getStrings(CLUSTERING_FORMAT);
+        }
+
         @Override
         public void map(Object key, MapWritable value, Context context) throws IOException, InterruptedException {
-            context.write(new Text(key.toString()), value);
+            Text gPriorityOrder = value.get(new Text("G_PRIORITY_ORDER")) instanceof NullWritable ? new Text("") : (Text) value.get(new Text("G_PRIORITY_ORDER"));
+            Text gCloseDate = value.get(new Text("G_CLOSE_DATE")) instanceof NullWritable ? new Text("") : (Text) value.get(new Text("G_CLOSE_DATE"));
+            Text isDelete = value.get(new Text("IS_DELETE")) instanceof NullWritable ? new Text("N") : (Text) value.get(new Text("IS_DELETE"));
+            if (gPriorityOrder.toString().isEmpty() && gCloseDate.toString().isEmpty() && !isDelete.toString().equalsIgnoreCase("Y")) { // 廣告品不列入計算
+                MapWritable outValue = new MapWritable();
+                outValue.put(new Text("INCLUDE"), new Text("Y"));
+                for (String keyField : clusterField) {
+                    Text keyTextField = new Text(keyField);
+                    if (value.containsKey(keyTextField)) {
+                        outValue.put(keyTextField, value.get(keyTextField));
+                    }
+                }
+                context.write(new Text(key.toString()), outValue);
+            }
         }
     }
 
-    public static class ProdClusteringFilterJobReducer extends Reducer<Text,MapWritable,NullWritable,Text> {
+    public static class ProdClusteringFilterJobReducer extends Reducer<Text, MapWritable, Text, MapWritable> {
         private Configuration conf;
-        private Text result = new Text();
-        private List<String> goodsFields;
+        private List<String> clusterField;
         private Set<Text> ignoreCID = new HashSet<>();
 
         @Override
@@ -71,15 +94,15 @@ public class ProdClusteringFilterJob extends Configured implements org.apache.ha
             conf = context.getConfiguration();
             FileSystem fs = FileSystem.get(conf);
 
-            goodsFields = Arrays.asList(conf.getStrings(GOODS_FILE_FORMAT));
+            clusterField = Arrays.asList(conf.getStrings(CLUSTERING_FORMAT));
             List<String> asdWeightFields = Arrays.asList(conf.getStrings(ASD_WEIGHT_FILE_FORMAT));
 
             BufferedReader br = new BufferedReader(new InputStreamReader(fs.open(new Path(conf.get("asdweight.file.path")))));
             String str;
             while ((str = br.readLine()) != null) {
                 String[] data = str.split("\t");
-                if(data.length == asdWeightFields.size()){
-                    if(data[asdWeightFields.indexOf("APPLY_STATUS")].equalsIgnoreCase("A")){
+                if (data.length == asdWeightFields.size()) {
+                    if (data[asdWeightFields.indexOf("APPLY_STATUS")].equalsIgnoreCase("A")) {
                         ignoreCID.add(new Text(data[asdWeightFields.indexOf("CTRL_ROWID")]));
                     }
                 }
@@ -89,31 +112,26 @@ public class ProdClusteringFilterJob extends Configured implements org.apache.ha
         }
 
         public void reduce(Text key, Iterable<MapWritable> values, Context context) throws IOException, InterruptedException {
-                MapWritable tmpValue = new MapWritable();
-                for (MapWritable val : values) {
-                    Text cid = (Text) val.get(new Text("CTRL_ROWID"));
-                    if (!ignoreCID.contains(cid)) {
-                        tmpValue.putAll(val);
+            MapWritable tmpValue = new MapWritable();
+            for (MapWritable val : values) {
+                Text cid = (Text) val.get(new Text("CTRL_ROWID"));
+                if (!ignoreCID.contains(cid)) {
+                    tmpValue.putAll(val);
+                }
+            }
+
+            if (!tmpValue.containsKey(new Text("EXCLUDE")) && tmpValue.containsKey(new Text("INCLUDE"))) {
+                MapWritable outVal = new MapWritable();
+                for (String field : clusterField) {
+                    if (tmpValue.containsKey(new Text(field))) {
+                        outVal.put(new Text(field), tmpValue.get(new Text(field)));
+                    } else {
+                        outVal.put(new Text(field), new Text("(null)"));
                     }
                 }
 
-                if (!tmpValue.containsKey(new Text("EXCLUDE"))) {
-                    StringBuilder builder = new StringBuilder();
-                    for (String field : goodsFields) {
-                        if (builder.toString().length() != 0) {
-                            builder.append("\t");
-                        }
-                        if (tmpValue.containsKey(new Text(field))) {
-                            Writable writable = tmpValue.get(new Text(field));
-                            builder.append(writable == null || writable.toString().equals("(null)")  ? "" : writable.toString());
-                        } else {
-                            builder.append("");
-                        }
-                    }
-
-                    result.set(builder.toString());
-                    context.write(NullWritable.get(), result);
-                }
+                context.write(key, outVal);
+            }
 
         }
     }
@@ -122,14 +140,14 @@ public class ProdClusteringFilterJob extends Configured implements org.apache.ha
     public int run(String[] args) throws Exception {
         conf = getConf();
 
-        if (args.length != 4) {
+        if (args.length != 5) {
             System.err.println("Usage: ProdClusteringFilterJob <asdweight tsv file path> <buyrankitem seq dir path> <goods seq dir path> <out>");
             return -1;
         }
 
         conf.set("asdweight.file.path", args[0]);
         FileSystem fs = FileSystem.get(conf);
-        Path outputPath = new Path(args[3]);
+        Path outputPath = new Path(args[4]);
         fs.delete(outputPath, true);
 
         Job job = Job.getInstance(conf, "ProdClusteringFilterJob");
@@ -138,13 +156,14 @@ public class ProdClusteringFilterJob extends Configured implements org.apache.ha
         job.setReducerClass(ProdClusteringFilterJobReducer.class);
         job.setMapOutputKeyClass(Text.class);
         job.setMapOutputValueClass(MapWritable.class);
-        job.setOutputKeyClass(NullWritable.class);
-        job.setOutputValueClass(Text.class);
-        job.setOutputFormatClass(TextOutputFormat.class);
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(MapWritable.class);
+        job.setOutputFormatClass(SequenceFileOutputFormat.class);
 
-//        MultipleInputs.addInputPath(job, new Path(args[0]), SequenceFileInputFormat.class, AsdweightMapper.class);
+
         MultipleInputs.addInputPath(job, new Path(args[1]), SequenceFileInputFormat.class, BuyrankitemMapper.class);
         MultipleInputs.addInputPath(job, new Path(args[2]), SequenceFileInputFormat.class, GoodsMapper.class);
+        MultipleInputs.addInputPath(job, new Path(args[3]), SequenceFileInputFormat.class, BritemorderMapper.class);
 
         FileOutputFormat.setOutputPath(job, outputPath);
 

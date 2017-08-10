@@ -32,6 +32,7 @@ import java.util.LinkedList;
 import java.util.List;
 
 /**
+ * 計算 Group 相關資訊(GROUP_NUM、GROUP_HEAD)
  * Created by jia03740 on 2017/6/12.
  */
 public class ProdClusteringRefineJob extends Configured implements Tool {
@@ -168,6 +169,7 @@ public class ProdClusteringRefineJob extends Configured implements Tool {
                 for (String keyField : clusterField) {
                     outValue.put(new Text(keyField), new Text(data[clusterField.indexOf(keyField)]));
                 }
+                outValue.remove(new Text("GROUP_NUM"));
                 context.write(outKey, outValue);
             } else if (data.length == 2) {
                 SortedKey outKey = new SortedKey();
@@ -198,6 +200,10 @@ public class ProdClusteringRefineJob extends Configured implements Tool {
             for (MapWritable val : values) {
                 MapWritable map = new MapWritable(val);
                 if (i == 0) {
+                    if(!map.containsKey(new Text("GROUP_NUM"))){
+                        break;
+                    }
+
                     clusterNum = map.get(new Text("GROUP_NUM")).toString();
                     i++;
                     continue;
@@ -217,8 +223,12 @@ public class ProdClusteringRefineJob extends Configured implements Tool {
                     if (!outValue.isEmpty()) {
                         outValue += "\t";
                     }
+
                     if (val.containsKey(tmp)) {
-                        outValue += val.get(tmp).toString();
+                        Writable writable = val.get(tmp);
+                        outValue += writable.toString();
+                    } else {
+                        outValue += "(null)";
                     }
                 }
 
