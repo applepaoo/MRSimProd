@@ -265,7 +265,9 @@ public class SolrConnectUtils {
     }
     
     public static void closeZkClient() {
-    	zkClient.close();
+    	if (zkClient != null) {
+    		zkClient.close();
+    	}
     }
 
     public static void main(String args[]) throws Exception {
