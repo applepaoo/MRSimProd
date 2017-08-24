@@ -27,6 +27,7 @@ import tw.com.ruten.ts.utils.JobUtils;
 import tw.com.ruten.ts.utils.SolrConnectUtils;
 import tw.com.ruten.ts.utils.TsConf;
 import org.json.simple.parser.JSONParser;
+import org.mortbay.log.Log;
 
 import java.io.IOException;
 import java.text.ParseException;
@@ -170,10 +171,12 @@ public class ProdClusteringUpdateListJob extends Configured implements Tool {
         private JSONParser jsonParser = new JSONParser();
         private int insertKey = -1;
         private boolean isWrite2Solr = false;
+        private String collection = "";
 
         protected void setup(Context context) {
             conf = context.getConfiguration();
             isWrite2Solr = context.getConfiguration().getBoolean("isWrite2Solr", false);
+            collection = context.getConfiguration().get("collection");
         }
 
         public void reduce(Text key, Iterable<MapWritable> values, Context context) throws IOException, InterruptedException {
@@ -236,12 +239,23 @@ public class ProdClusteringUpdateListJob extends Configured implements Tool {
             if (result.toString().length() > 0) {
 
                 if (isWrite2Solr && groupTagUpdateModels.size() >= 1000) { /// flush
-                    try {
-                        SolrConnectUtils.sendToSolr("172.25.8.223:2181,172.25.8.224:2181,172.25.8.225:2181", "product1", groupTagUpdateModels, false);
-                        groupTagUpdateModels = new LinkedList<>();
-                    } catch (Exception e) {
-                        context.write(key, new Text(e.toString()));
-                    }
+                	
+                	if ( "all".equals(collection) == true ) {
+                        try {
+                            SolrConnectUtils.sendToSolr("172.25.8.223:2181,172.25.8.224:2181,172.25.8.225:2181", "product1", groupTagUpdateModels, false);
+                            SolrConnectUtils.sendToSolr("172.25.8.223:2181,172.25.8.224:2181,172.25.8.225:2181", "psearch1", groupTagUpdateModels, false);
+                            groupTagUpdateModels = new LinkedList<>();
+                        } catch (Exception e) {
+                            context.write(key, new Text(e.toString()));
+                        }                		
+                	} else {
+                        try {
+                            SolrConnectUtils.sendToSolr("172.25.8.223:2181,172.25.8.224:2181,172.25.8.225:2181", collection, groupTagUpdateModels, false);
+                            groupTagUpdateModels = new LinkedList<>();
+                        } catch (Exception e) {
+                            context.write(key, new Text(e.toString()));
+                        }
+                	}
 
                     Thread.sleep(100);
                 }
@@ -253,8 +267,15 @@ public class ProdClusteringUpdateListJob extends Configured implements Tool {
         public void cleanup(Context context) throws IOException, InterruptedException {
             try {
                 if (isWrite2Solr && groupTagUpdateModels.size() > 0) {
-                    SolrConnectUtils.sendToSolr("172.25.8.223:2181,172.25.8.224:2181,172.25.8.225:2181", "product1", groupTagUpdateModels, false);
-                    groupTagUpdateModels = new LinkedList<>();
+                    
+                	if ( "all".equals(collection) == true ) {
+                    	SolrConnectUtils.sendToSolr("172.25.8.223:2181,172.25.8.224:2181,172.25.8.225:2181", "product1", groupTagUpdateModels, false);
+                    	SolrConnectUtils.sendToSolr("172.25.8.223:2181,172.25.8.224:2181,172.25.8.225:2181", "psearch1", groupTagUpdateModels, false);
+                        groupTagUpdateModels = new LinkedList<>();               		
+                	} else {
+                    	SolrConnectUtils.sendToSolr("172.25.8.223:2181,172.25.8.224:2181,172.25.8.225:2181", collection, groupTagUpdateModels, false);
+                        groupTagUpdateModels = new LinkedList<>();                		
+                	}
                 }
             } catch (Exception e) {
                 context.write(new Text("final"), new Text(e.toString()));
@@ -268,7 +289,7 @@ public class ProdClusteringUpdateListJob extends Configured implements Tool {
     public int run(String[] args) throws Exception {
         conf = getConf();
         if (args.length < 2) {
-            System.err.println("Usage: ProdClusteringUpdateListJob <current cluster file path> <output file path> <isWrite2Solr> <old cluster file path>");
+            System.err.println("Usage: ProdClusteringUpdateListJob <current cluster file path> <output file path> <isWrite2Solr> <old cluster file path> [solr update collection]");
             return -1;
         }
 
@@ -277,6 +298,15 @@ public class ProdClusteringUpdateListJob extends Configured implements Tool {
         Path outputFilePath = new Path(args[1]);
         conf.setBoolean("isWrite2Solr", args.length < 3 ? false : Boolean.parseBoolean(args[2]));
         Path oldFilePath = args.length < 4 ? null : new Path(args[3]);
+        
+        String collection = args.length == 5 ? args[4] : "all";
+        if ( collection != null ) {
+        	conf.set("collection", collection);
+        	LOG.info("set solr update collection: "+ collection);
+        } else {
+        	conf.set("collection", "all");
+        	LOG.info("set solr update collection: all");
+        }
 
 
         FileSystem fs = FileSystem.get(conf);
