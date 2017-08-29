@@ -68,9 +68,12 @@ public class ProdClusteringFilterJob extends Configured implements org.apache.ha
         @Override
         public void map(Object key, MapWritable value, Context context) throws IOException, InterruptedException {
             Text gPriorityOrder = value.get(new Text("G_PRIORITY_ORDER")) instanceof NullWritable ? new Text("") : (Text) value.get(new Text("G_PRIORITY_ORDER"));
+            Text bCoin = value.get(new Text("B_COIN")) instanceof NullWritable ? new Text("") : (Text) value.get(new Text("B_COIN"));
             Text gCloseDate = value.get(new Text("G_CLOSE_DATE")) instanceof NullWritable ? new Text("") : (Text) value.get(new Text("G_CLOSE_DATE"));
             Text isDelete = value.get(new Text("IS_DELETE")) instanceof NullWritable ? new Text("N") : (Text) value.get(new Text("IS_DELETE"));
-            if (gPriorityOrder.toString().isEmpty() && gCloseDate.toString().isEmpty() && !isDelete.toString().equalsIgnoreCase("Y")) { // 廣告品不列入計算
+            if ((gPriorityOrder.toString().isEmpty() || gPriorityOrder.toString().equals("0")) &&
+                    gCloseDate.toString().isEmpty() && !isDelete.toString().equalsIgnoreCase("Y") &&
+                    (bCoin.toString().isEmpty() || bCoin.toString().equals("0"))) { // 廣告品不列入計算
                 MapWritable outValue = new MapWritable();
                 outValue.put(new Text("INCLUDE"), new Text("Y"));
                 for (String keyField : clusterField) {
