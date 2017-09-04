@@ -75,9 +75,10 @@ public class ProdClusteringJob extends Configured implements Tool {
         public int sort(SortedKey other) { /// for sort
             int r = this.defaultKey.compareTo(other.defaultKey);
             if (r == 0) {
-                BigInteger b1 = new BigInteger(this.sortValue.toString());
-                BigInteger b2 = new BigInteger(other.sortValue.toString());
-                return b1.compareTo(b2);
+//                BigInteger b1 = new BigInteger(this.sortValue.toString());
+//                BigInteger b2 = new BigInteger(other.sortValue.toString());
+//                return b1.compareTo(b2);
+                return this.sortValue.toString().compareTo(other.sortValue.toString());
             }
 
             return r;
@@ -132,6 +133,7 @@ public class ProdClusteringJob extends Configured implements Tool {
     public static class ProdClusteringJobMapper extends Mapper<Object, MapWritable, SortedKey, MapWritable> {
         private Configuration conf;
         private SimHash simHash = new SimHash(Hashing.murmur3_128());
+        private HashFunction hf = Hashing.sha256();
         private HashSet<String> stopwordList = new HashSet<>();
 
         @Override
@@ -146,7 +148,9 @@ public class ProdClusteringJob extends Configured implements Tool {
         public void map(Object key, MapWritable value, Context context) throws IOException, InterruptedException {
                 SortedKey outKey = new SortedKey();
                 outKey.defaultKey.set(value.get(new Text("CTRL_ROWID")).toString());
-                outKey.sortValue.set(new BigInteger(simHash.hash(value.get(new Text("G_NAME")).toString(), stopwordList).toByteArray()).toString());
+                // for 100% match
+//                outKey.sortValue.set(new BigInteger(simHash.hash(value.get(new Text("G_NAME")).toString(), stopwordList).toByteArray()).toString());
+                outKey.sortValue.set(hf.hashString(value.get(new Text("G_NAME")).toString(), Charset.defaultCharset()).toString());
                 context.write(outKey, value);
         }
     }
@@ -175,7 +179,9 @@ public class ProdClusteringJob extends Configured implements Tool {
         public void reduce(SortedKey key, Iterable<MapWritable> values, Context context) throws IOException, InterruptedException {
             int prodCount = 0, clusterCount = 0, clusterNO = 1, clusterNum = 0;
 
-            BigInteger last = null;
+//            BigInteger last = null;
+            // for 100% match
+            String last = null;
             String clusterName = key.defaultKey + "," + clusterNO++;
 
             for (MapWritable val : values) {
@@ -184,11 +190,15 @@ public class ProdClusteringJob extends Configured implements Tool {
                 if (val.get(new Text("FINGERPRINT")).toString().equals("(null)")) {
                     val.put(new Text("FINGERPRINT"), new Text(hf.hashString(clusterName, Charset.defaultCharset()).toString()));
                 }
-                BigInteger current = new BigInteger(key.sortValue.toString());
+
+//                BigInteger current = new BigInteger(key.sortValue.toString());
+                // for 100% match
+                String current = key.sortValue.toString();
 
                 if (last != null) {
-                    double distance = simHash.distance(BitSet.valueOf(last.toByteArray()), BitSet.valueOf(current.toByteArray()));
-                    if (distance > threshold) {
+//                    double distance = simHash.distance(BitSet.valueOf(last.toByteArray()), BitSet.valueOf(current.toByteArray()));
+                    // for 100% match
+                    if (!current.equalsIgnoreCase(last)) {
                         clusterName = key.defaultKey + "," + clusterNO++;
                         clusterInfo.set(val.get(new Text("FINGERPRINT")) + "\t" + clusterNum);
                         mos.write("clusterInfo", NullWritable.get(), clusterInfo, "clusterInfo/part");
