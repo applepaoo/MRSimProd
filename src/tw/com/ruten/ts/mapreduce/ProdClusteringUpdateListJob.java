@@ -309,8 +309,8 @@ public class ProdClusteringUpdateListJob extends Configured implements Tool {
         }
 
 
-        FileSystem fs = FileSystem.get(conf);
-        fs.delete(outputFilePath, true);
+//        FileSystem fs = FileSystem.get(conf);
+//        fs.delete(outputFilePath, true);
         Job job = Job.getInstance(conf, "ProdClusteringUpdateListJob");
 
 

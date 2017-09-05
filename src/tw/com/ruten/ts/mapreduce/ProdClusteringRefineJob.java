@@ -248,14 +248,14 @@ public class ProdClusteringRefineJob extends Configured implements Tool {
         }
 
         conf = getConf();
-        FileSystem fs = FileSystem.get(conf);
-        Path currentPath = new Path(args[1], "current");
-        Path oldPath = new Path(args[1], "old");
-        fs.delete(oldPath, true);
-        if (fs.exists(currentPath)) {
-            fs.rename(currentPath, oldPath);
-            fs.delete(currentPath, true);
-        }
+//        FileSystem fs = FileSystem.get(conf);
+//        Path currentPath = new Path(args[1], "current");
+//        Path oldPath = new Path(args[1], "old");
+//        fs.delete(oldPath, true);
+//        if (fs.exists(currentPath)) {
+//            fs.rename(currentPath, oldPath);
+//            fs.delete(currentPath, true);
+//        }
 
         Job job = Job.getInstance(conf, "ProdClusteringRefineJob");
 
