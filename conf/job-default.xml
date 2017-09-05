@@ -29,7 +29,7 @@
 	</property>
 	<property>
 		<name>clustering.file.format</name>
-		<value>CTRL_ROWID,G_NO,G_CLASS,G_NAME,G_CLOSE_DATE,G_LASTUPDATE,G_DIRECT_PRICE,GROUP_HEAD,GROUP_NUM,FINGERPRINT,UPDATE</value>
+		<value>CTRL_ROWID,G_NO,G_CLASS,G_NAME,RANK,G_POST_TIME,G_LASTUPDATE,G_DIRECT_PRICE,GROUP_HEAD,GROUP_NUM,FINGERPRINT,UPDATE</value>
 		<description>
 			[String array] the value type : Boolean, Int, Float, Double, String ....
 			this property be loaded in the TSConfig create and use in MR task.
