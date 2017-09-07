@@ -11,7 +11,6 @@ import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.*;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat;
-import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
 import tw.com.ruten.ts.utils.JobUtils;
@@ -46,12 +45,9 @@ public class ProdClusteringFilterJob extends Configured implements org.apache.ha
     public static class BuyrankitemMapper extends Mapper<Object, MapWritable, Text, MapWritable> {
         @Override
         public void map(Object key, MapWritable value, Context context) throws IOException, InterruptedException {
-        	
         	String bStatus = value.get(new Text("B_STATUS")).toString();
         	String bCoin = value.get(new Text("B_COIN")).toString();
-        	    	
-            if (bStatus.equalsIgnoreCase("r") 
-            		&& !"0".equals(bCoin)) {
+            if (bStatus.equalsIgnoreCase("r") && !"0".equals(bCoin)) {
                 MapWritable outValue = new MapWritable();
                 outValue.put(new Text("EXCLUDE"), new Text("Y"));
                 outValue.put(new Text("CTRL_ROWID"), value.get(new Text("CTRL_ROWID")));
@@ -77,7 +73,7 @@ public class ProdClusteringFilterJob extends Configured implements org.apache.ha
             Text gCloseDate = value.get(new Text("G_CLOSE_DATE")) instanceof NullWritable ? new Text("") : (Text) value.get(new Text("G_CLOSE_DATE"));
             Text isDelete = value.get(new Text("IS_DELETE")) instanceof NullWritable ? new Text("N") : (Text) value.get(new Text("IS_DELETE"));
             if ((gPriorityOrder.toString().isEmpty() || gPriorityOrder.toString().equals("0")) &&
-                    gCloseDate.toString().isEmpty() && !isDelete.toString().equalsIgnoreCase("Y") 
+                    gCloseDate.toString().isEmpty() && !isDelete.toString().equalsIgnoreCase("Y")
 //                    && (bCoin.toString().isEmpty() || "0".equals(bCoin.toString()))
                     ) { // 廣告品不列入計算
                 MapWritable outValue = new MapWritable();
@@ -123,9 +119,11 @@ public class ProdClusteringFilterJob extends Configured implements org.apache.ha
         public void reduce(Text key, Iterable<MapWritable> values, Context context) throws IOException, InterruptedException {
             MapWritable tmpValue = new MapWritable();
             for (MapWritable val : values) {
-                Text cid = (Text) val.get(new Text("CTRL_ROWID"));
-                if (!ignoreCID.contains(cid)) {
-                    tmpValue.putAll(val);
+                if (!val.get(new Text("CTRL_ROWID")).toString().equals("(null)")) {
+                    Text cid = (Text) val.get(new Text("CTRL_ROWID"));
+                    if (!ignoreCID.contains(cid)) {
+                        tmpValue.putAll(val);
+                    }
                 }
             }
 
