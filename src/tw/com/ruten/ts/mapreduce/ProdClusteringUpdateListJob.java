@@ -241,7 +241,6 @@ public class ProdClusteringUpdateListJob extends Configured implements Tool {
                 	
                 	if ( "all".equals(collection) == true ) {
                         try {
-//                            SolrConnectUtils.sendToSolr("172.25.8.223:2181,172.25.8.224:2181,172.25.8.225:2181", "product1", groupTagUpdateModels, false);
                             SolrConnectUtils.sendToSolr("172.25.8.223:2181,172.25.8.224:2181,172.25.8.225:2181", "psearch1", groupTagUpdateModels, false);
                             groupTagUpdateModels = new LinkedList<>();
                         } catch (Exception e) {
@@ -268,7 +267,6 @@ public class ProdClusteringUpdateListJob extends Configured implements Tool {
                 if (isWrite2Solr && groupTagUpdateModels.size() > 0) {
                     
                 	if ( "all".equals(collection) == true ) {
-                    	SolrConnectUtils.sendToSolr("172.25.8.223:2181,172.25.8.224:2181,172.25.8.225:2181", "product1", groupTagUpdateModels, false);
                     	SolrConnectUtils.sendToSolr("172.25.8.223:2181,172.25.8.224:2181,172.25.8.225:2181", "psearch1", groupTagUpdateModels, false);
                         groupTagUpdateModels = new LinkedList<>();               		
                 	} else {
