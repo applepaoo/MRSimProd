@@ -40,7 +40,6 @@ import tw.com.ruten.ts.utils.TsConf;
  */
 public class ProdClusteringJob extends Configured implements Tool {
     public static Logger LOG = Logger.getLogger(ProdClusteringJob.class);
-    private static String GOODS_FILE_FORMAT = "goods.file.format";
     private static String CLUSTERING_FORMAT = "clustering.file.format";
     private static String STOPWORD_FILE = "stopword.file";
     public Configuration conf;
@@ -75,9 +74,6 @@ public class ProdClusteringJob extends Configured implements Tool {
         public int sort(SortedKey other) { /// for sort
             int r = this.defaultKey.compareTo(other.defaultKey);
             if (r == 0) {
-//                BigInteger b1 = new BigInteger(this.sortValue.toString());
-//                BigInteger b2 = new BigInteger(other.sortValue.toString());
-//                return b1.compareTo(b2);
                 return this.sortValue.toString().compareTo(other.sortValue.toString());
             }
 
@@ -133,7 +129,7 @@ public class ProdClusteringJob extends Configured implements Tool {
     public static class ProdClusteringJobMapper extends Mapper<Object, MapWritable, SortedKey, MapWritable> {
         private Configuration conf;
         private SimHash simHash = new SimHash(Hashing.murmur3_128());
-        private HashFunction hf = Hashing.sha256();
+        private HashFunction hf = Hashing.sha1();
         private HashSet<String> stopwordList = new HashSet<>();
 
         @Override
@@ -148,9 +144,8 @@ public class ProdClusteringJob extends Configured implements Tool {
         public void map(Object key, MapWritable value, Context context) throws IOException, InterruptedException {
                 SortedKey outKey = new SortedKey();
                 outKey.defaultKey.set(value.get(new Text("CTRL_ROWID")).toString());
-                // for 100% match
-//                outKey.sortValue.set(new BigInteger(simHash.hash(value.get(new Text("G_NAME")).toString(), stopwordList).toByteArray()).toString());
-                outKey.sortValue.set(hf.hashString(value.get(new Text("G_NAME")).toString(), Charset.defaultCharset()).toString());
+                String fingerprint = value.get(new Text("CTRL_ROWID")).toString() + "," + value.get(new Text("G_NAME")).toString();
+                outKey.sortValue.set(hf.hashString(fingerprint, Charset.defaultCharset()).toString());
                 context.write(outKey, value);
         }
     }
@@ -164,7 +159,6 @@ public class ProdClusteringJob extends Configured implements Tool {
         private Text info = new Text();
         private Text result = new Text();
         private Text clusterInfo = new Text();
-        private SimHash simHash = new SimHash(Hashing.murmur3_128());
         private HashFunction hf = Hashing.sha1();
         private List<String> clusterField;
 
@@ -177,46 +171,29 @@ public class ProdClusteringJob extends Configured implements Tool {
         }
 
         public void reduce(SortedKey key, Iterable<MapWritable> values, Context context) throws IOException, InterruptedException {
-            int prodCount = 0, clusterCount = 0, clusterNO = 1, clusterNum = 0;
-
-//            BigInteger last = null;
-            // for 100% match
+            int prodCount = 0, clusterCount = 0, clusterNum = 0;
             String last = null;
-            String clusterName = key.defaultKey + "," + clusterNO++;
 
             for (MapWritable val : values) {
                 val.put(new Text("UPDATE"), new Text(sdfSolr.format(new Date())));
-
-                if (val.get(new Text("FINGERPRINT")).toString().equals("(null)")) {
-                    val.put(new Text("FINGERPRINT"), new Text(hf.hashString(clusterName, Charset.defaultCharset()).toString()));
-                }
-
-//                BigInteger current = new BigInteger(key.sortValue.toString());
-                // for 100% match
                 String current = key.sortValue.toString();
+                val.put(new Text("FINGERPRINT"), new Text(current));
 
-                if (last != null) {
-//                    double distance = simHash.distance(BitSet.valueOf(last.toByteArray()), BitSet.valueOf(current.toByteArray()));
-                    // for 100% match
+                if (last != null) { // 第一個商品之後接要與先前的商品比較是否一樣
                     if (!current.equalsIgnoreCase(last)) {
-                        clusterName = key.defaultKey + "," + clusterNO++;
-                        clusterInfo.set(val.get(new Text("FINGERPRINT")) + "\t" + clusterNum);
+                        clusterInfo.set(last + "\t" + clusterNum);// 儲存上一個集群的資訊
                         mos.write("clusterInfo", NullWritable.get(), clusterInfo, "clusterInfo/part");
-                        val.put(new Text("FINGERPRINT"), new Text(hf.hashString(clusterName, Charset.defaultCharset()).toString()));
                         clusterNum = 0;
 
                         clusterCount++;
                     }
-                }
-
-
-                if (last == null) {
+                }else{// 第一個商品，直接計算Fingerprint
                     clusterCount++;
                 }
+
+
                 prodCount++;
                 clusterNum++;
-
-
                 last = current;
 
                 String outValue = "";
@@ -236,7 +213,7 @@ public class ProdClusteringJob extends Configured implements Tool {
                 result.set(outValue);
                 mos.write("result", NullWritable.get(), result, "result/part");
             }
-            clusterInfo.set(hf.hashString(clusterName, Charset.defaultCharset()) + "\t" + clusterNum);
+            clusterInfo.set(last + "\t" + clusterNum); // 儲存最後集群的資訊
             mos.write("clusterInfo", NullWritable.get(), clusterInfo, "clusterInfo/part");
             info.set(new Text(key.defaultKey + "\t" + (clusterCount == 0 && prodCount == 0 ? 0.0 : (clusterCount / (float) prodCount))) + "\t" + clusterCount + "\t" + prodCount);
             mos.write("info", NullWritable.get(), info, "info/part");

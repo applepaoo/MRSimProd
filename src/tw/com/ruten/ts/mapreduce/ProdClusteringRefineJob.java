@@ -76,21 +76,11 @@ public class ProdClusteringRefineJob extends Configured implements Tool {
                     BigInteger directPrice1 = new BigInteger(data1[0]);
                     BigInteger directPrice2 = new BigInteger(data2[0]);
                     int r1 = directPrice1.compareTo(directPrice2);
-                    if (r1 == 0) {
-                        long lastUpdate1 = sdfSolr.parse(data1[1]).getTime();
-                        long lastUpdate2 = sdfSolr.parse(data2[1]).getTime();
-
-                        if (lastUpdate1 > lastUpdate2) {
-                            return -1;
-                        } else if (lastUpdate1 < lastUpdate2) {
-                            return 1;
-                        }else {
-                            BigInteger gno1 = new BigInteger(data1[2]);
-                            BigInteger gno2 = new BigInteger(data2[2]);
+                    if (r1 == 0 && !data1[1].isEmpty() && !data2[1].isEmpty()) {
+                            BigInteger gno1 = new BigInteger(data1[1]);
+                            BigInteger gno2 = new BigInteger(data2[1]);
 
                             return gno2.compareTo(gno1);
-                        }
-
                     }
 
                     return directPrice1.compareTo(directPrice2);
@@ -163,7 +153,7 @@ public class ProdClusteringRefineJob extends Configured implements Tool {
             if (clusterField != null && clusterField.size() == data.length) {
                 SortedKey outKey = new SortedKey();
                 outKey.defaultKey.set(data[clusterField.indexOf("FINGERPRINT")]);
-                outKey.sortValue.set(data[clusterField.indexOf("G_DIRECT_PRICE")] + "\t" + data[clusterField.indexOf("G_LASTUPDATE")] + "\t" + data[clusterField.indexOf("G_NO")]);
+                outKey.sortValue.set(data[clusterField.indexOf("G_DIRECT_PRICE")] + "\t" + data[clusterField.indexOf("G_NO")]);
 
                 MapWritable outValue = new MapWritable();
                 for (String keyField : clusterField) {
@@ -248,15 +238,6 @@ public class ProdClusteringRefineJob extends Configured implements Tool {
         }
 
         conf = getConf();
-//        FileSystem fs = FileSystem.get(conf);
-//        Path currentPath = new Path(args[1], "current");
-//        Path oldPath = new Path(args[1], "old");
-//        fs.delete(oldPath, true);
-//        if (fs.exists(currentPath)) {
-//            fs.rename(currentPath, oldPath);
-//            fs.delete(currentPath, true);
-//        }
-
         Job job = Job.getInstance(conf, "ProdClusteringRefineJob");
 
         job.setJarByClass(ProdClusteringRefineJob.class);

@@ -196,7 +196,6 @@ public class ProdClusteringUpdateListJob extends Configured implements Tool {
             boolean current_group_head = ((Text) current.get(new Text("GROUP_HEAD"))).toString().equals("Y") ? true : false;
             int current_group_num = Integer.parseInt(((Text) current.get(new Text("GROUP_NUM"))).toString());
 
-
             try {
                 if (list.size() > 1) {
                     MapWritable last = list.get(1);
@@ -242,7 +241,7 @@ public class ProdClusteringUpdateListJob extends Configured implements Tool {
                 	
                 	if ( "all".equals(collection) == true ) {
                         try {
-                            SolrConnectUtils.sendToSolr("172.25.8.223:2181,172.25.8.224:2181,172.25.8.225:2181", "product1", groupTagUpdateModels, false);
+//                            SolrConnectUtils.sendToSolr("172.25.8.223:2181,172.25.8.224:2181,172.25.8.225:2181", "product1", groupTagUpdateModels, false);
                             SolrConnectUtils.sendToSolr("172.25.8.223:2181,172.25.8.224:2181,172.25.8.225:2181", "psearch1", groupTagUpdateModels, false);
                             groupTagUpdateModels = new LinkedList<>();
                         } catch (Exception e) {
