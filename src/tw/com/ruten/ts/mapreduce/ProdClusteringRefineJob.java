@@ -73,17 +73,24 @@ public class ProdClusteringRefineJob extends Configured implements Tool {
                     String[] data1 = this.sortValue.toString().split("\t");
                     String[] data2 = other.sortValue.toString().split("\t");
 
-                    BigInteger directPrice1 = new BigInteger(data1[0]);
-                    BigInteger directPrice2 = new BigInteger(data2[0]);
-                    int r1 = directPrice1.compareTo(directPrice2);
+                    Double directPrice1 = Double.parseDouble(data1[0]);
+                    Double directPrice2 = Double.parseDouble(data2[0]);
+                    int r1 = directPrice2.compareTo(directPrice1);
                     if (r1 == 0 && !data1[1].isEmpty() && !data2[1].isEmpty()) {
-                            BigInteger gno1 = new BigInteger(data1[1]);
-                            BigInteger gno2 = new BigInteger(data2[1]);
+                            BigInteger gPostTime1 = new BigInteger(data1[1]);
+                            BigInteger gPostTime2 = new BigInteger(data2[1]);
 
-                            return gno2.compareTo(gno1);
+                            int r2 = gPostTime2.compareTo(gPostTime1);
+                            if(r2 == 0 && !data1[2].isEmpty() && !data2[2].isEmpty()){
+                                BigInteger gno1 = new BigInteger(data1[2]);
+                                BigInteger gno2 = new BigInteger(data2[2]);
+
+                                return gno2.compareTo(gno1);
+                            }
+                            return r2;
                     }
 
-                    return directPrice1.compareTo(directPrice2);
+                    return r1;
                 }
             }catch (Exception e){
                 LOG.error("{}",e);
@@ -140,6 +147,7 @@ public class ProdClusteringRefineJob extends Configured implements Tool {
     public static class ProdClusteringRefineJobMapper extends Mapper<Object, Text, SortedKey, MapWritable> {
         private Configuration conf;
         private List<String> clusterField;
+        private SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.S'Z'");
 
         @Override
         public void setup(Context context) throws IOException, InterruptedException {
@@ -149,25 +157,30 @@ public class ProdClusteringRefineJob extends Configured implements Tool {
 
         @Override
         public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
-            String[] data = value.toString().split("\t");
-            if (clusterField != null && clusterField.size() == data.length) {
-                SortedKey outKey = new SortedKey();
-                outKey.defaultKey.set(data[clusterField.indexOf("FINGERPRINT")]);
-                outKey.sortValue.set(data[clusterField.indexOf("G_DIRECT_PRICE")] + "\t" + data[clusterField.indexOf("G_NO")]);
+            try {
+                String[] data = value.toString().split("\t");
+                if (clusterField != null && clusterField.size() == data.length) {
+                    SortedKey outKey = new SortedKey();
+                    outKey.defaultKey.set(data[clusterField.indexOf("FINGERPRINT")]);
+                    String rank = data[clusterField.indexOf("RANK")].equalsIgnoreCase("(null)") ? "0" : data[clusterField.indexOf("RANK")];
+                    outKey.sortValue.set(rank + "\t" + sdf.parse(data[clusterField.indexOf("G_POST_TIME")]).getTime() + "\t" + data[clusterField.indexOf("G_NO")]);
 
-                MapWritable outValue = new MapWritable();
-                for (String keyField : clusterField) {
-                    outValue.put(new Text(keyField), new Text(data[clusterField.indexOf(keyField)]));
+                    MapWritable outValue = new MapWritable();
+                    for (String keyField : clusterField) {
+                        outValue.put(new Text(keyField), new Text(data[clusterField.indexOf(keyField)]));
+                    }
+                    outValue.remove(new Text("GROUP_NUM"));
+                    context.write(outKey, outValue);
+                } else if (data.length == 2) {
+                    SortedKey outKey = new SortedKey();
+                    outKey.defaultKey.set(data[0]);
+                    outKey.sortValue.set("9999999999999");
+                    MapWritable outValue = new MapWritable();
+                    outValue.put(new Text("GROUP_NUM"), new Text(data[1]));
+                    context.write(outKey, outValue);
                 }
-                outValue.remove(new Text("GROUP_NUM"));
-                context.write(outKey, outValue);
-            } else if (data.length == 2) {
-                SortedKey outKey = new SortedKey();
-                outKey.defaultKey.set(data[0]);
-                outKey.sortValue.set("-1");
-                MapWritable outValue = new MapWritable();
-                outValue.put(new Text("GROUP_NUM"), new Text(data[1]));
-                context.write(outKey, outValue);
+            }catch (Exception e){
+                LOG.error(e.getMessage());
             }
         }
     }
