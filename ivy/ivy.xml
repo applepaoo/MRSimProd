@@ -31,6 +31,7 @@
     <dependency org="org.apache.hadoop" name="hadoop-hdfs" rev="2.7.3" conf="*->default"/>
     <dependency org="org.apache.hadoop" name="hadoop-mapreduce-client-core" rev="2.7.3" conf="*->default"/>
     <dependency org="org.apache.hadoop" name="hadoop-mapreduce-client-jobclient" rev="2.7.3" conf="*->default"/>
+    <dependency org="org.apache.hadoop" name="hadoop-auth" rev="2.7.3" conf="*->default"/>
     <!-- https://mvnrepository.com/artifact/com.google.guava/guava -->
     <dependency org="com.google.guava" name="guava" rev="22.0"/>
     <!-- https://mvnrepository.com/artifact/com.huaban/jieba-analysis -->
