@@ -3,6 +3,7 @@ package tw.com.ruten.ts.mapreduce;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.math.BigInteger;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -36,6 +37,8 @@ import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 
+import com.sun.xml.internal.ws.message.StringHeader;
+
 import tw.com.ruten.ts.utils.JobUtils;
 import tw.com.ruten.ts.utils.TsConf;
 
@@ -46,84 +49,84 @@ public class JImageHashCluster extends Configured implements Tool {
 	private static String STOPWORD_FILE = "stopword.file";
 	public Configuration conf;
 
-	public static class SortedKey implements WritableComparable<SortedKey> {
-		Text sortValue = new Text();
-		Text defaultKey = new Text();
-
-		SortedKey() {
-		}
-
-		@Override
-		public void readFields(DataInput in) throws IOException {
-			defaultKey.set(Text.readString(in));
-			sortValue.set(in.readLine());
-		}
-
-		@Override
-		public void write(DataOutput out) throws IOException {
-			Text.writeString(out, defaultKey.toString());
-			out.writeBytes(sortValue.toString());
-		}
-
-		@Override
-		public int compareTo(SortedKey other) { /// default
-			return this.defaultKey.compareTo(other.defaultKey);
-		}
-
-		public int sort(SortedKey other) { /// for sort
-			int r = this.defaultKey.compareTo(other.defaultKey);
-			if (r == 0) {
-				return this.sortValue.toString().compareTo(other.sortValue.toString());
-			}
-
-			return r;
-		}
-
-		public int group(SortedKey other) { /// for group
-			return compareTo(other);
-		}
-
-		@Override
-		public int hashCode() { /// for partition
-			return this.defaultKey.toString().hashCode();
-		}
-
-		public static class SortComparator extends WritableComparator {
-			SortComparator() {
-				super(SortedKey.class, true);
-			}
-
-			@Override
-			public int compare(WritableComparable o1, WritableComparable o2) {
-				if (o1 instanceof SortedKey && o2 instanceof SortedKey) {
-					SortedKey k1 = (SortedKey) o1;
-					SortedKey k2 = (SortedKey) o2;
-
-					return k1.sort(k2);
-				}
-
-				return o1.compareTo(o2);
-			}
-		}
-
-		public static class GroupComparator extends WritableComparator {
-			GroupComparator() {
-				super(SortedKey.class, true);
-			}
-
-			@Override
-			public int compare(WritableComparable o1, WritableComparable o2) {
-				if (o1 instanceof SortedKey && o2 instanceof SortedKey) {
-					SortedKey k1 = (SortedKey) o1;
-					SortedKey k2 = (SortedKey) o2;
-
-					return k1.group(k2);
-				}
-
-				return o1.compareTo(o2);
-			}
-		}
-	}
+	// public static class SortedKey implements WritableComparable<SortedKey> {
+	// Text sortValue = new Text();
+	// Text defaultKey = new Text();
+	//
+	// SortedKey() {
+	// }
+	//
+	// @Override
+	// public void readFields(DataInput in) throws IOException {
+	// defaultKey.set(Text.readString(in));
+	// sortValue.set(in.readLine());
+	// }
+	//
+	// @Override
+	// public void write(DataOutput out) throws IOException {
+	// Text.writeString(out, defaultKey.toString());
+	// out.writeBytes(sortValue.toString());
+	// }
+	//
+	// @Override
+	// public int compareTo(SortedKey other) { /// default
+	// return this.defaultKey.compareTo(other.defaultKey);
+	// }
+	//
+	// public int sort(SortedKey other) { /// for sort
+	// int r = this.defaultKey.compareTo(other.defaultKey);
+	// if (r == 0) {
+	// return this.sortValue.toString().compareTo(other.sortValue.toString());
+	// }
+	//
+	// return r;
+	// }
+	//
+	// public int group(SortedKey other) { /// for group
+	// return compareTo(other);
+	// }
+	//
+	// @Override
+	// public int hashCode() { /// for partition
+	// return this.defaultKey.toString().hashCode();
+	// }
+	//
+	// public static class SortComparator extends WritableComparator {
+	// SortComparator() {
+	// super(SortedKey.class, true);
+	// }
+	//
+	// @Override
+	// public int compare(WritableComparable o1, WritableComparable o2) {
+	// if (o1 instanceof SortedKey && o2 instanceof SortedKey) {
+	// SortedKey k1 = (SortedKey) o1;
+	// SortedKey k2 = (SortedKey) o2;
+	//
+	// return k1.sort(k2);
+	// }
+	//
+	// return o1.compareTo(o2);
+	// }
+	// }
+	//
+	// public static class GroupComparator extends WritableComparator {
+	// GroupComparator() {
+	// super(SortedKey.class, true);
+	// }
+	//
+	// @Override
+	// public int compare(WritableComparable o1, WritableComparable o2) {
+	// if (o1 instanceof SortedKey && o2 instanceof SortedKey) {
+	// SortedKey k1 = (SortedKey) o1;
+	// SortedKey k2 = (SortedKey) o2;
+	//
+	// return k1.group(k2);
+	// }
+	//
+	// return o1.compareTo(o2);
+	// }
+	// }
+	// }
 
 	public static class JImageHashClusterMapper extends Mapper<LongWritable, Text, Text, MapWritable> {
 		private Configuration conf;
@@ -149,14 +152,6 @@ public class JImageHashCluster extends Configured implements Tool {
 				MapWritable outValue = new MapWritable();
 
 				outValue.put(new Text("G_NO"), new Text(jsonObject.get("G_NO").toString()));
-				// Set<String> keySet = jsonObject.keySet();
-				//
-				// for (String k : keySet) {
-				//
-				// Object obj1 = jsonObject.get(k);
-				// outValue.put(new Text(k), new Text((String) obj1));
-				//
-				// }
 
 				context.write(outKey, outValue);
 				context.getCounter("Mapper", "out").increment(1);
@@ -176,6 +171,7 @@ public class JImageHashCluster extends Configured implements Tool {
 		public static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.S'Z'");
 		private List<String> clusterField;
 		private Text outKey = new Text();
+		private Text newKey = new Text();
 		private Text outValue = new Text();
 		private Text info = new Text();
 		private Text result = new Text();
@@ -190,10 +186,21 @@ public class JImageHashCluster extends Configured implements Tool {
 
 		public void reduce(Text key, Iterable<MapWritable> values, Context context)
 				throws IOException, InterruptedException {
+
+			newKey.set(hexToBin(String.valueOf(key)).toString()); // IMG_HASH_V1 hex to binary
+
 			for (MapWritable value : values) {
-				context.write(key, value);
+				context.write(newKey, value);
 			}
 
+		}
+
+		static String hexToBin(String s) { // hex to binary
+			return new BigInteger(s, 16).toString(2);
+		}
+
+		static int hammingDistance(BigInteger i, BigInteger i2) { // hamming distance
+			return i.xor(i2).bitCount();
 		}
 
 		@Override
