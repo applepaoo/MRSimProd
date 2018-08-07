@@ -3,33 +3,55 @@ package tw.com.ruten.ts.mapreduce;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import javax.xml.transform.OutputKeys;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.conf.Configured;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.MapWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.WritableComparator;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.hadoop.mapreduce.Mapper.Context;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.mapreduce.lib.output.MultipleOutputs;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
+import org.apache.hadoop.util.Tool;
+import org.apache.hadoop.util.ToolRunner;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.log4j.Logger;
+import org.json.simple.JSONObject;
+import org.json.simple.parser.JSONParser;
+import org.json.simple.parser.ParseException;
 
-import jdk.internal.org.objectweb.asm.tree.analysis.Value;
-import tw.com.ruten.ts.mapreduce.ProdClusteringJob.SortedKey;
-import tw.com.ruten.ts.mapreduce.ProdClusteringJob.SortedKey.GroupComparator;
-import tw.com.ruten.ts.mapreduce.ProdClusteringJob.SortedKey.SortComparator;
+import com.sun.corba.se.spi.ior.Writeable;
 
-public class JImageHashCluster {
+import tw.com.ruten.ts.mapreduce.JImageHashCluster.SortedKey.GroupComparator;
+import tw.com.ruten.ts.mapreduce.JImageHashCluster.SortedKey.SortComparator;
+import tw.com.ruten.ts.utils.JobUtils;
+import tw.com.ruten.ts.utils.TsConf;
+
+public class JImageHashCluster extends Configured implements Tool {
 
 	public static Logger LOG = Logger.getLogger(ProdClusteringJob.class);
 	private static String CLUSTERING_FORMAT = "clustering.file.format";
 	private static String STOPWORD_FILE = "stopword.file";
 	public Configuration conf;
 
-	// SortedKey 公用寫法?
 	public static class SortedKey implements WritableComparable<SortedKey> {
 		Text sortValue = new Text();
 		Text defaultKey = new Text();
@@ -109,51 +131,98 @@ public class JImageHashCluster {
 		}
 	}
 
-	public static class JImageHashClusterMapper extends Mapper<Object, MapWritable, SortedKey, MapWritable> {
+	public static class JImageHashClusterMapper extends Mapper<LongWritable, Text, Text, MapWritable> {
 		private Configuration conf;
+		private JSONParser parser = new JSONParser();
+		private Text outKey = new Text();
+		private Set<String> removeFields = new HashSet<String>();
 
 		@Override
 		public void setup(Context context) throws IOException, InterruptedException {
-
 			conf = context.getConfiguration();
-
 		}
 
 		@Override
-		public void map(Object key, MapWritable value, Context context) throws IOException, InterruptedException {
+		public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
+			String v = value.toString();
+			try {
+				JSONObject jsonObject = (JSONObject) parser.parse(v.toString());
+				Object objectKey = jsonObject.get("HASH_IMG");
 
-			// MAP TODO
+				outKey.set(objectKey.toString());
+				MapWritable outValue = new MapWritable();
+
+				Set<String> keySet = jsonObject.keySet();
+
+				for (String IMG_HASH_V1 : keySet) {
+					if (removeFields.contains(IMG_HASH_V1)) {
+						continue;
+					}
+
+					Object obj = jsonObject.get(IMG_HASH_V1);
+					outValue.put(new Text(IMG_HASH_V1), new Text((String) obj));
+
+				}
+
+				context.write(outKey, outValue);
+
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
 
 		}
 
 	}
 
-	public static class JImageHashClusterReducer extends Reducer<SortedKey, MapWritable, NullWritable, Text> {
+	public static class JImageHashClusterReducer extends Reducer<Text, MapWritable, Text, MapWritable> {
 		private Configuration conf;
+		private MultipleOutputs mos;
+		public static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.S'Z'");
+		private List<String> clusterField;
+		private Text outKey = new Text();
+		private Text outValue = new Text();
+		private Text info = new Text();
+		private Text result = new Text();
+		private Text clusterInfo = new Text();
 
 		@Override
 		public void setup(Context context) throws IOException, InterruptedException {
-
 			conf = context.getConfiguration();
-
+			clusterField = Arrays.asList(conf.getStrings(CLUSTERING_FORMAT));
+			mos = new MultipleOutputs(context);
 		}
 
-		public void reduce(SortedKey key, Iterable<MapWritable> values, Context context)
+		public void reduce(Text key, Iterable<MapWritable> values, Context context)
 				throws IOException, InterruptedException {
-
-			// REDUCE TODO
+			
+			for (MapWritable val : values) {
+				outKey.set(val.get("HASH_IMG").toString());
+				
+			}			
 		}
 
+		@Override
+		protected void cleanup(Context context) throws IOException, InterruptedException {
+			mos.close();
+		}
 	}
 
-	public static void main(String[] args) throws Exception {
+	public int run(String[] args) throws Exception {
+		conf = getConf();
 
-		if (args.length != 2) {
+		if (args.length < 2) {
 			System.err.println("Usage: JImageHashCluster <input path> <output path>");
+			return -1;
 		}
 
-		Job job = new Job();
+		FileSystem fs = FileSystem.get(conf);
+		Path outputPath = new Path(args[1]);
+		fs.delete(outputPath, true);
+
+		Job job = Job.getInstance(conf, "JImageHashCluster");
+
 		job.setJarByClass(JImageHashCluster.class);
+		job.setInputFormatClass(TextInputFormat.class);
 		job.setJobName("JImageHash Clustering");
 
 		// mapper
@@ -168,9 +237,20 @@ public class JImageHashCluster {
 		job.setOutputFormatClass(TextOutputFormat.class);
 		job.setSortComparatorClass(SortComparator.class);
 		job.setGroupingComparatorClass(GroupComparator.class);
-		
-		System.exit(job.waitForCompletion(true) ? 0 : 1);
 
+		FileInputFormat.addInputPath(job, new Path(args[0]));
+		FileOutputFormat.setOutputPath(job, outputPath);
+		MultipleOutputs.addNamedOutput(job, "info", TextOutputFormat.class, NullWritable.class, Text.class);
+		MultipleOutputs.addNamedOutput(job, "clusterInfo", TextOutputFormat.class, NullWritable.class, Text.class);
+		MultipleOutputs.addNamedOutput(job, "result", TextOutputFormat.class, NullWritable.class, Text.class);
+		job.waitForCompletion(true);
+		return JobUtils.sumbitJob(job, true) ? 0 : -1;
+
+	}
+
+	public static void main(String[] args) throws Exception {
+		int res = ToolRunner.run(TsConf.create(), new JImageHashCluster(), args);
+		System.exit(res);
 	}
 
 }

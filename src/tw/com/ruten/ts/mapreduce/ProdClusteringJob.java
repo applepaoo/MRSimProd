@@ -34,8 +34,6 @@ import org.apache.log4j.Logger;
 
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
-import com.ruten.tool.SimHash;
-
 import tw.com.ruten.ts.mapreduce.ProdClusteringJob.SortedKey.GroupComparator;
 import tw.com.ruten.ts.mapreduce.ProdClusteringJob.SortedKey.SortComparator;
 import tw.com.ruten.ts.utils.JobUtils;
@@ -132,7 +130,7 @@ public class ProdClusteringJob extends Configured implements Tool {
 
 	public static class ProdClusteringJobMapper extends Mapper<Object, MapWritable, SortedKey, MapWritable> {
 		private Configuration conf;
-		private SimHash simHash = new SimHash(Hashing.murmur3_128());
+//		private SimHash simHash = new SimHash(Hashing.murmur3_128());
 		private HashFunction hf = Hashing.sha1();
 		private HashSet<String> stopwordList = new HashSet<>();
 
@@ -146,7 +144,7 @@ public class ProdClusteringJob extends Configured implements Tool {
 
 		@Override
 		public void map(Object key, MapWritable value, Context context) throws IOException, InterruptedException {
-			//(Key, Value) = (CTRL_ROWID, fingerPrint)
+			// (Key, Value) = (CTRL_ROWID, fingerPrint)
 			SortedKey outKey = new SortedKey();
 			outKey.defaultKey.set(value.get(new Text("CTRL_ROWID")).toString());
 			String fingerprint = value.get(new Text("CTRL_ROWID")).toString() + ","
@@ -182,6 +180,7 @@ public class ProdClusteringJob extends Configured implements Tool {
 			String last = null;
 
 			for (MapWritable val : values) {
+				// (Key, Value) = (Sorted.key, )
 				val.put(new Text("UPDATE"), new Text(sdfSolr.format(new Date())));
 				String current = key.sortValue.toString();
 				val.put(new Text("FINGERPRINT"), new Text(current));
