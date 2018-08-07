@@ -5,22 +5,19 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
-import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-
-import javax.xml.transform.OutputKeys;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.MapWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.io.WritableComparator;
 import org.apache.hadoop.mapreduce.Job;
@@ -29,6 +26,7 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.MultipleOutputs;
+import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
@@ -38,10 +36,6 @@ import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 
-import com.sun.corba.se.spi.ior.Writeable;
-
-import tw.com.ruten.ts.mapreduce.JImageHashCluster.SortedKey.GroupComparator;
-import tw.com.ruten.ts.mapreduce.JImageHashCluster.SortedKey.SortComparator;
 import tw.com.ruten.ts.utils.JobUtils;
 import tw.com.ruten.ts.utils.TsConf;
 
@@ -146,28 +140,30 @@ public class JImageHashCluster extends Configured implements Tool {
 		public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
 			String v = value.toString();
 			try {
-				JSONObject jsonObject = (JSONObject) parser.parse(v.toString());
-				Object objectKey = jsonObject.get("HASH_IMG");
 
-				outKey.set(objectKey.toString());
+				Object obj = parser.parse(v);
+				JSONObject jsonObject = (JSONObject) obj;
+
+				outKey.set(jsonObject.get("IMG_HASH_V1").toString());
+
 				MapWritable outValue = new MapWritable();
 
-				Set<String> keySet = jsonObject.keySet();
-
-				for (String IMG_HASH_V1 : keySet) {
-					if (removeFields.contains(IMG_HASH_V1)) {
-						continue;
-					}
-
-					Object obj = jsonObject.get(IMG_HASH_V1);
-					outValue.put(new Text(IMG_HASH_V1), new Text((String) obj));
-
-				}
+				outValue.put(new Text("G_NO"), new Text(jsonObject.get("G_NO").toString()));
+				// Set<String> keySet = jsonObject.keySet();
+				//
+				// for (String k : keySet) {
+				//
+				// Object obj1 = jsonObject.get(k);
+				// outValue.put(new Text(k), new Text((String) obj1));
+				//
+				// }
 
 				context.write(outKey, outValue);
+				context.getCounter("Mapper", "out").increment(1);
 
-			} catch (Exception e) {
+			} catch (ParseException e) {
 				e.printStackTrace();
+				context.getCounter("Mapper", "parse.exception").increment(1);
 			}
 
 		}
@@ -194,16 +190,15 @@ public class JImageHashCluster extends Configured implements Tool {
 
 		public void reduce(Text key, Iterable<MapWritable> values, Context context)
 				throws IOException, InterruptedException {
-			
-			for (MapWritable val : values) {
-				outKey.set(val.get("HASH_IMG").toString());
-				
-			}			
+			for (MapWritable value : values) {
+				context.write(key, value);
+			}
+
 		}
 
 		@Override
 		protected void cleanup(Context context) throws IOException, InterruptedException {
-			mos.close();
+			// mos.close();
 		}
 	}
 
@@ -227,21 +222,19 @@ public class JImageHashCluster extends Configured implements Tool {
 
 		// mapper
 		job.setMapperClass(JImageHashClusterMapper.class);
-		job.setMapOutputKeyClass(SortedKey.class);
+		job.setMapOutputKeyClass(Text.class);
 		job.setMapOutputValueClass(MapWritable.class);
 
 		// reducer
 		job.setReducerClass(JImageHashClusterReducer.class);
-		job.setOutputKeyClass(NullWritable.class);
-		job.setOutputValueClass(Text.class);
-		job.setOutputFormatClass(TextOutputFormat.class);
-		job.setSortComparatorClass(SortComparator.class);
-		job.setGroupingComparatorClass(GroupComparator.class);
+		job.setOutputKeyClass(Text.class);
+		job.setOutputValueClass(MapWritable.class);
+		job.setOutputFormatClass(SequenceFileOutputFormat.class);
+		// job.setSortComparatorClass(SortComparator.class);
+		// job.setGroupingComparatorClass(GroupComparator.class);
 
 		FileInputFormat.addInputPath(job, new Path(args[0]));
 		FileOutputFormat.setOutputPath(job, outputPath);
-		MultipleOutputs.addNamedOutput(job, "info", TextOutputFormat.class, NullWritable.class, Text.class);
-		MultipleOutputs.addNamedOutput(job, "clusterInfo", TextOutputFormat.class, NullWritable.class, Text.class);
 		MultipleOutputs.addNamedOutput(job, "result", TextOutputFormat.class, NullWritable.class, Text.class);
 		job.waitForCompletion(true);
 		return JobUtils.sumbitJob(job, true) ? 0 : -1;
