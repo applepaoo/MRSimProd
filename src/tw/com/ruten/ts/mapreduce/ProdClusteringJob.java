@@ -130,7 +130,7 @@ public class ProdClusteringJob extends Configured implements Tool {
 
 	public static class ProdClusteringJobMapper extends Mapper<Object, MapWritable, SortedKey, MapWritable> {
 		private Configuration conf;
-//		private SimHash simHash = new SimHash(Hashing.murmur3_128());
+		// private SimHash simHash = new SimHash(Hashing.murmur3_128());
 		private HashFunction hf = Hashing.sha1();
 		private HashSet<String> stopwordList = new HashSet<>();
 
@@ -180,7 +180,7 @@ public class ProdClusteringJob extends Configured implements Tool {
 			String last = null;
 
 			for (MapWritable val : values) {
-				// (Key, Value) = (Sorted.key, )
+
 				val.put(new Text("UPDATE"), new Text(sdfSolr.format(new Date())));
 				String current = key.sortValue.toString();
 				val.put(new Text("FINGERPRINT"), new Text(current));
