@@ -62,8 +62,8 @@ public class JImageHashCluster extends Configured implements Tool {
 		public void setup(Context context) throws IOException, InterruptedException {
 			conf = context.getConfiguration();
 			hashKey = conf.get("cluster.hashkey", "IMG_HASH_V2");
-			bitCount = conf.getInt("cluster.bitcount", 256);
-			bitShift = conf.getInt("cluster.bitshift", 32);
+			bitCount = conf.getInt("cluster.bitcount", 256); //1024
+			bitShift = conf.getInt("cluster.bitshift", 32); //128
 
 			StringBuilder strMask = new StringBuilder();
 
