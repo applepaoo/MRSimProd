@@ -12,6 +12,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.MapWritable;
+import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
@@ -22,11 +23,13 @@ import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.Reducer.Context;
 import org.apache.log4j.Logger;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 
+import tw.com.ruten.ts.mapreduce.JImageHashClusterTest.SortedKey;
 import tw.com.ruten.ts.utils.JobUtils;
 import tw.com.ruten.ts.utils.TsConf;
 
@@ -58,7 +61,7 @@ public class JImageHashClusterSample extends Configured implements Tool {
 		@Override
 		public void setup(Context context) throws IOException, InterruptedException {
 			conf = context.getConfiguration();
-			hashKey = conf.get("cluster.hashkey", "IMG_HASH_V1");
+			hashKey = conf.get("cluster.hashkey", "IMG_HASH_V2");
 			bitCount = conf.getInt("cluster.bitcount", 256);
 			bitShift = conf.getInt("cluster.bitshift", 32);
 
@@ -123,7 +126,7 @@ public class JImageHashClusterSample extends Configured implements Tool {
 		public void setup(Context context) throws IOException, InterruptedException {
 			conf = context.getConfiguration();
 			threshold = conf.getInt("cluster.threshold", 10);
-			targetHash.set(conf.get("cluster.hashkey", "IMG_HASH_V1"));
+			targetHash.set(conf.get("cluster.hashkey", "IMG_HASH_V2"));
 		}
 
 		public void reduce(SortedKey key, Iterable<MapWritable> values, Context context)
@@ -156,6 +159,10 @@ public class JImageHashClusterSample extends Configured implements Tool {
 				}
 			}
 
+			if (hasSim == true) {
+				context.write(new Text(preGno), new Text(preHashKey));
+			}
+
 		}
 
 		@Override
@@ -180,8 +187,89 @@ public class JImageHashClusterSample extends Configured implements Tool {
 		return dis(hex2BigInt(in1), hex2BigInt(in2));
 	}
 
+	public static class JImageHashClusterMapper2 extends Mapper<LongWritable, Text, Text, NullWritable> {
+		private Configuration conf;
+
+		@Override
+		public void setup(Context context) throws IOException, InterruptedException {
+			conf = context.getConfiguration();
+		}
+
+		@Override
+		public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
+
+			context.write(value, NullWritable.get());
+
+		}
+
+	}
+
+	public static class JImageHashClusterReducer2 extends Reducer<Text, NullWritable, Text, NullWritable> {
+		private Configuration conf;
+
+		@Override
+		public void setup(Context context) throws IOException, InterruptedException {
+			conf = context.getConfiguration();
+
+		}
+
+		public void reduce(Text key, Iterable<NullWritable> values, Context context)
+				throws IOException, InterruptedException {
+
+			context.write(key, NullWritable.get());
+
+		}
+
+	}
+
+	public static class JImageHashClusterMapper3 extends Mapper<LongWritable, Text, SortedKey, MapWritable> {
+		private Configuration conf;
+
+		@Override
+		public void setup(Context context) throws IOException, InterruptedException {
+			conf = context.getConfiguration();
+		}
+
+		@Override
+		public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
+
+			String arr[] = value.toString().split("\\t");
+
+			SortedKey outKey = new SortedKey();
+			outKey.defaultKey.set(arr[1].toString()); // HASH
+			outKey.sortValue.set(arr[0].toString()); // GNO
+
+			MapWritable outValue = new MapWritable();
+
+			context.write(outKey, outValue);
+
+		}
+
+	}
+
+	public static class JImageHashClusterReducer3 extends Reducer<SortedKey, MapWritable, Text, Text> {
+		private Configuration conf;
+
+		@Override
+		public void setup(Context context) throws IOException, InterruptedException {
+			conf = context.getConfiguration();
+
+		}
+
+		public void reduce(SortedKey key, Iterable<MapWritable> values, Context context)
+				throws IOException, InterruptedException {
+
+			for (MapWritable val : values) {
+				context.write(key.defaultKey, key.sortValue);
+			}
+
+		}
+
+	}
+
 	public int run(String[] args) throws Exception {
 		conf = getConf();
+		String jobtime = String.valueOf(System.currentTimeMillis());
 
 		if (args.length < 2) {
 			System.err.println("Usage: JImageHashCluster <input path> <output path>");
@@ -189,14 +277,14 @@ public class JImageHashClusterSample extends Configured implements Tool {
 		}
 
 		FileSystem fs = FileSystem.get(conf);
-		Path outputPath = new Path(args[1]);
+		Path outputPath = new Path(args[1], jobtime);
 		fs.delete(outputPath, true);
 
 		Job job = Job.getInstance(conf, "JImageHashCluster");
 
 		job.setJarByClass(JImageHashClusterSample.class);
 		job.setInputFormatClass(TextInputFormat.class);
-		job.setJobName("JImageHash Clustering");
+		job.setJobName("JImageHash_Cluster");
 
 		// mapper
 		job.setMapperClass(JImageHashClusterMapper.class);
@@ -217,8 +305,59 @@ public class JImageHashClusterSample extends Configured implements Tool {
 		FileInputFormat.addInputPath(job, new Path(args[0]));
 		FileOutputFormat.setOutputPath(job, outputPath);
 		job.waitForCompletion(true);
-		return JobUtils.sumbitJob(job, true) ? 0 : -1;
+		//////////////////////////////////////////////////////////////////////////////
 
+		Path outputPath1 = new Path(outputPath, "distinct");
+		fs.delete(outputPath1, true);
+
+		Job job2 = Job.getInstance(conf, "JImageHashCluster2");
+
+		job2.setJarByClass(JImageHashClusterSample.class);
+		job2.setInputFormatClass(TextInputFormat.class);
+		job2.setJobName("JImageHash_Cluster2");
+
+		// mapper
+		job2.setMapperClass(JImageHashClusterMapper2.class);
+		// job.setMapOutputKeyClass(Text.class);
+		job2.setMapOutputKeyClass(Text.class);
+		job2.setMapOutputValueClass(NullWritable.class);
+
+		// reducer
+		job2.setReducerClass(JImageHashClusterReducer2.class);
+		job2.setOutputKeyClass(Text.class);
+		job2.setOutputValueClass(NullWritable.class);
+
+
+		FileInputFormat.addInputPath(job2, outputPath);
+		FileOutputFormat.setOutputPath(job2, outputPath1);
+		job2.waitForCompletion(true);
+
+		//////////////////////////////////////////////////////////////////////////////
+
+		Path outputPath2 = new Path(outputPath1, "sort");
+		//fs.delete(outputPath1, true);
+
+		Job job3 = Job.getInstance(conf, "JImageHashCluster3");
+
+		job3.setJarByClass(JImageHashClusterSample.class);
+		job3.setInputFormatClass(TextInputFormat.class);
+		job3.setJobName("JImageHash_Cluster3");
+
+		// mapper
+		job3.setMapperClass(JImageHashClusterMapper3.class);
+		// job.setMapOutputKeyClass(Text.class);
+		job3.setMapOutputKeyClass(SortedKey.class);
+		job3.setMapOutputValueClass(MapWritable.class);
+
+		// reducer
+		job3.setReducerClass(JImageHashClusterReducer3.class);
+		job3.setOutputKeyClass(Text.class);
+		job3.setOutputValueClass(MapWritable.class);
+
+		FileInputFormat.addInputPath(job3, outputPath1);
+		FileOutputFormat.setOutputPath(job3, outputPath2);
+		job3.waitForCompletion(true);
+		return JobUtils.sumbitJob(job3, true) ? 0 : -1;
 	}
 
 	public static void main(String[] args) throws Exception {
